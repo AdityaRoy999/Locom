@@ -415,14 +415,14 @@ export default function App() {
   const [code, setCode] = useState(examples.python);
   const [result, setResult] = useState<RunResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [leftPaneWidth, setLeftPaneWidth] = useState(54);
   const [isAiOpen, setIsAiOpen] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiQuestion, setAiQuestion] = useState('');
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
-  const [isShadcnTheme, setIsShadcnTheme] = useState(false);
+  const [isShadcnTheme, setIsShadcnTheme] = useState(true);
   const [aiSidebarWidth, setAiSidebarWidth] = useState(420);
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
@@ -439,7 +439,6 @@ export default function App() {
   const [problemSearch, setProblemSearch] = useState('');
   const [problemDetails, setProblemDetails] = useState<Record<string, LcProblem>>({});
   const [isProblemDetailLoading, setIsProblemDetailLoading] = useState(false);
-  const [problemToShow, setProblemToShow] = useState<LcProblem | null>(null);
   const [ideProblem, setIdeProblem] = useState<LcProblem | null>(null);
   const [isAntiCheatEnabled, setIsAntiCheatEnabled] = useState(false);
   const [isProctorStarting, setIsProctorStarting] = useState(false);
@@ -862,12 +861,6 @@ export default function App() {
     }
   };
 
-  const showProblem = async (problem: LcProblem) => {
-    const detailedProblem = await loadProblemDetail(problem);
-    setProblemToShow(detailedProblem);
-    navigateTo(`/problem/${detailedProblem.slug || detailedProblem.id}`);
-  };
-
   const askAi = async () => {
     const question = aiQuestion.trim();
     if (!question) {
@@ -916,7 +909,6 @@ export default function App() {
   if (problemPathMatch) {
     const problemId = decodeURIComponent(problemPathMatch[1]);
     const currentProblem =
-      problemToShow ??
       lcProblems.find((problem) => problem.slug === problemId || problem.id === problemId || problem.frontendId === problemId) ??
       null;
 
@@ -1515,42 +1507,22 @@ export default function App() {
                         </Box>
                         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                           {isShadcnTheme ? (
-                            <>
-                              <ShadButton
-                                variant="outline"
-                                size="sm"
-                                onClick={() => void showProblem(problem)}
-                                disabled={isProblemDetailLoading}
-                              >
-                                {isProblemDetailLoading ? 'Loading...' : 'Show Problem'}
-                              </ShadButton>
-                              <ShadButton
-                                size="sm"
-                                onClick={() => void openIdeSession(problem)}
-                                disabled={isProctorStarting || isProblemDetailLoading}
-                              >
-                                Solve Problem
-                              </ShadButton>
-                            </>
+                            <ShadButton
+                              size="sm"
+                              onClick={() => void openIdeSession(problem)}
+                              disabled={isProctorStarting || isProblemDetailLoading}
+                            >
+                              Solve
+                            </ShadButton>
                           ) : (
-                            <>
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                onClick={() => void showProblem(problem)}
-                                disabled={isProblemDetailLoading}
-                              >
-                                {isProblemDetailLoading ? 'Loading...' : 'Show Problem'}
-                              </Button>
-                              <Button
-                                variant="contained"
-                                size="small"
-                                onClick={() => void openIdeSession(problem)}
-                                disabled={isProctorStarting || isProblemDetailLoading}
-                              >
-                                Solve Problem
-                              </Button>
-                            </>
+                            <Button
+                              variant="contained"
+                              size="small"
+                              onClick={() => void openIdeSession(problem)}
+                              disabled={isProctorStarting || isProblemDetailLoading}
+                            >
+                              Solve
+                            </Button>
                           )}
                         </Stack>
                       </Stack>
@@ -1586,7 +1558,7 @@ export default function App() {
   if (currentPath === '/settings' && isShadcnTheme) {
     return (
       <TooltipProvider>
-        <div className="min-h-screen bg-background p-6 text-foreground">
+        <div className="min-h-screen bg-background px-4 py-5 text-foreground sm:p-6">
           <div className="mx-auto flex max-w-3xl flex-col gap-6">
             <div className="flex items-center justify-between">
               <div className="font-mono text-sm font-semibold">
@@ -1611,14 +1583,14 @@ export default function App() {
 
                   <TabsContent value="theme">
                     <div className="grid gap-5">
-                      <div className="flex items-center justify-between gap-4">
+                      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                         <div>
                           <div className="text-sm font-medium">Component Theme</div>
                           <div className="text-sm text-muted-foreground">
                             Material UI or shadcn controls.
                           </div>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                           <ShadButton variant="outline" onClick={useMaterialTheme}>
                             Material
                           </ShadButton>
@@ -1628,7 +1600,7 @@ export default function App() {
 
                       <Separator />
 
-                      <div className="flex items-center justify-between gap-4">
+                      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                         <div>
                           <div className="text-sm font-medium">Color Mode</div>
                           <div className="text-sm text-muted-foreground">
@@ -1645,7 +1617,7 @@ export default function App() {
 
                       <Separator />
 
-                      <div className="flex items-center justify-between gap-4">
+                      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                         <div>
                           <div className="text-sm font-medium">Anti-cheat Mode</div>
                           <div className="text-sm text-muted-foreground">
@@ -1821,6 +1793,14 @@ export default function App() {
             fontFamily:
               '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, ui-monospace, monospace',
           },
+          '@media (max-width: 600px)': {
+            'input, textarea, select, button': {
+              fontSize: '16px',
+            },
+            '.cm-editor, .cm-content, .cm-line, .cm-scroller': {
+              fontSize: '16px',
+            },
+          },
           '.cm-scroller': {
             backgroundColor: isCompilerDark ? '#0d1117' : '#ffffff',
             overflow: 'auto',
@@ -1909,30 +1889,33 @@ export default function App() {
       >
         <Stack
           direction="row"
-          spacing={2}
+          spacing={{ xs: 1, sm: 2 }}
           sx={{
             alignItems: 'center',
             justifyContent: 'initial',
-            flexWrap: 'nowrap',
+            flexWrap: { xs: 'wrap', sm: 'nowrap' },
             width: '100%',
             display: 'flex',
             position: 'relative',
-            columnGap: 2,
+            columnGap: { xs: 1, sm: 2 },
+            rowGap: { xs: 1, sm: 0 },
             bgcolor: isShadcnTheme ? 'var(--locom-bg)' : 'background.default',
             borderBottom: 1,
             borderColor: isShadcnTheme ? 'var(--locom-border)' : 'divider',
-            px: 0,
-            height: 57,
-            py: 0,
+            px: { xs: 1, sm: 0 },
+            height: { xs: 'auto', sm: 57 },
+            minHeight: { xs: 96, sm: 57 },
+            py: { xs: 1, sm: 0 },
           }}
         >
           <Box
             sx={{
               ml: 0,
-              px: 2,
+              px: { xs: 0.5, sm: 2 },
               height: 40,
               display: 'flex',
               alignItems: 'center',
+              flex: { xs: '1 1 auto', sm: '0 0 auto' },
               color: isShadcnTheme ? 'var(--foreground)' : 'inherit',
               fontFamily:
                 '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, ui-monospace, monospace',
@@ -1944,14 +1927,16 @@ export default function App() {
 
           <Box
             sx={{
-              position: 'absolute',
-              left: '50%',
-              top: '50%',
-              transform: 'translate(-50%, -50%)',
+              position: { xs: 'static', sm: 'absolute' },
+              left: { sm: '50%' },
+              top: { sm: '50%' },
+              transform: { xs: 'none', sm: 'translate(-50%, -50%)' },
               display: 'flex',
               alignItems: 'center',
               gap: 0.75,
               height: 40,
+              order: { xs: 3, sm: 0 },
+              mx: { xs: 'auto', sm: 0 },
               px: 1,
               border: '1px solid',
               borderColor: isShadcnTheme ? 'var(--locom-border)' : 'divider',
@@ -2014,15 +1999,20 @@ export default function App() {
 
           <Stack
             direction="row"
-            spacing={2}
+            spacing={{ xs: 0.75, sm: 2 }}
             sx={{
               alignItems: 'center',
               justifyContent: 'flex-end',
-              position: 'absolute',
-              right: { xs: 6, md: 8 },
-              top: '50%',
-              transform: 'translateY(-50%)',
+              position: { xs: 'static', sm: 'absolute' },
+              right: { sm: 8 },
+              top: { sm: '50%' },
+              transform: { xs: 'none', sm: 'translateY(-50%)' },
+              order: { xs: 2, sm: 0 },
+              flex: { xs: '0 1 auto', sm: 'initial' },
               minWidth: 0,
+              overflowX: { xs: 'auto', sm: 'visible' },
+              scrollbarWidth: 'none',
+              '&::-webkit-scrollbar': { display: 'none' },
             }}
           >
 
@@ -2031,13 +2021,13 @@ export default function App() {
               <ShadTooltip>
                 <TooltipTrigger asChild>
                   <ShadButton
-                    className="locom-ai-button !h-10 !w-10"
+                  className="locom-ai-button !h-9 !w-9 sm:!h-10 sm:!w-10"
                     variant="outline"
                     size="icon"
                     aria-label="Open AI assistant"
                     onClick={() => setIsAiOpen(true)}
                   >
-                    <img src="/star-ai-loader.svg" alt="" className="block size-6" />
+                    <img src="/star-ai-loader.svg" alt="" className="block size-5 sm:size-6" />
                   </ShadButton>
                 </TooltipTrigger>
                 <TooltipContent>AI assistant</TooltipContent>
@@ -2066,7 +2056,7 @@ export default function App() {
             <ShadTooltip>
               <TooltipTrigger asChild>
                 <ShadButton
-                  className="!h-10 !w-10"
+                  className="!h-9 !w-9 sm:!h-10 sm:!w-10"
                   variant="outline"
                   size="icon"
                   aria-label="Open settings"
@@ -2095,14 +2085,14 @@ export default function App() {
               value={language}
               onValueChange={(nextLanguage) => handleLanguageChange(nextLanguage as Language)}
             >
-              <SelectTrigger className="!h-10 w-36 justify-between rounded-lg px-3 text-sm [&_svg]:ml-3">
+              <SelectTrigger className="!h-9 w-[104px] justify-between rounded-lg px-2 text-sm sm:!h-10 sm:w-36 sm:px-3 [&_svg]:ml-2 sm:[&_svg]:ml-3">
                 <SelectValue placeholder="Language" />
               </SelectTrigger>
               <SelectContent
                 position="popper"
                 align="start"
                 sideOffset={4}
-                className="z-[10001] min-w-36 rounded-lg"
+                className="z-[10001] min-w-[104px] rounded-lg sm:min-w-36"
               >
                 <SelectItem className="pl-3 pr-10" value="python">
                   Python
@@ -2134,7 +2124,7 @@ export default function App() {
 
           {isShadcnTheme ? (
             <ShadButton
-              className="!h-10 !w-10"
+              className="!h-9 !w-9 sm:!h-10 sm:!w-10"
               onClick={runCode}
               disabled={isRunning}
               aria-label="Run code"
@@ -2163,6 +2153,10 @@ export default function App() {
             gridTemplateColumns: {
               xs: '1fr',
               md: `minmax(280px, ${leftPaneWidth}%) 6px minmax(280px, 1fr)`,
+            },
+            gridTemplateRows: {
+              xs: 'minmax(320px, 1fr) minmax(180px, 0.7fr)',
+              md: '1fr',
             },
             gap: 0,
             p: 0,
