@@ -1,0 +1,13 @@
+services:
+  locom:
+    build: .
+    env_file:
+      - .env.local
+    ports:
+      - "${LOCOM_PORT:-3001}:3001"
+    environment:
+      PORT: 3001
+      NVIDIA_MODEL: ${NVIDIA_MODEL:-google/gemma-2-2b-it}
+      SUPABASE_LC_TABLE: ${SUPABASE_LC_TABLE:-problem_catalog}
+      SUPABASE_LC_SCHEMA: ${SUPABASE_LC_SCHEMA:-public}
+      SUPABASE_LC_EVENTS_TABLE: ${SUPABASE_LC_EVENTS_TABLE:-}
