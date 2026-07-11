@@ -1228,6 +1228,52 @@ export default function App() {
           <CssBaseline />
           <GlobalStyles
             styles={{
+              '*': {
+                scrollbarWidth: 'thin',
+                scrollbarColor: isCompilerDark || isShadcnTheme ? '#6b7280 transparent' : '#9ca3af transparent',
+              },
+              '*::-webkit-scrollbar': {
+                width: 7,
+                height: 7,
+              },
+              '*::-webkit-scrollbar-track': {
+                background: 'transparent',
+              },
+              '*::-webkit-scrollbar-thumb': {
+                backgroundColor: isCompilerDark || isShadcnTheme ? '#6b7280' : '#9ca3af',
+                borderRadius: 999,
+              },
+              '*::-webkit-scrollbar-thumb:hover': {
+                backgroundColor: isCompilerDark || isShadcnTheme ? '#9ca3af' : '#6b7280',
+              },
+              '*::-webkit-scrollbar-corner': {
+                background: 'transparent',
+              },
+              '*::-webkit-scrollbar-button': {
+                display: 'none',
+                width: 0,
+                height: 0,
+              },
+              '.locom-problem-list': {
+                scrollbarWidth: 'thin',
+                scrollbarColor: isCompilerDark || isShadcnTheme ? '#8a8a8a transparent' : '#9ca3af transparent',
+              },
+              '.locom-problem-list::-webkit-scrollbar': {
+                width: 6,
+                height: 6,
+              },
+              '.locom-problem-list::-webkit-scrollbar-track': {
+                background: 'transparent',
+              },
+              '.locom-problem-list::-webkit-scrollbar-thumb': {
+                backgroundColor: isCompilerDark || isShadcnTheme ? '#8a8a8a' : '#9ca3af',
+                borderRadius: 999,
+              },
+              '.locom-problem-list::-webkit-scrollbar-button': {
+                display: 'none',
+                width: 0,
+                height: 0,
+              },
               '.locom-problem-content': {
                 fontSize: 15,
                 lineHeight: 1.75,
@@ -1444,7 +1490,7 @@ export default function App() {
                     )}
                   </Stack>
 
-                  <Stack divider={<Separator />} sx={{ maxHeight: 640, overflow: 'auto' }}>
+                  <Stack className="locom-problem-list" divider={<Separator />} sx={{ maxHeight: 640, overflow: 'auto' }}>
                     {visibleProblems.length === 0 && (
                       <Box sx={{ p: 3 }}>
                         <Typography color="text.secondary">
