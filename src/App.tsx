@@ -1,4 +1,4 @@
-﻿import { Fragment, useEffect, useMemo, useState, type PointerEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { cpp } from '@codemirror/lang-cpp';
 import { python } from '@codemirror/lang-python';
@@ -130,6 +130,24 @@ type LcStats = {
   attemptedProblems: number;
   totalTimeSeconds: number;
   byDifficulty: Record<string, number>;
+};
+
+type FaceDetectorInstance = {
+  detect: (source: HTMLVideoElement) => Promise<DetectedFace[]>;
+};
+
+type FaceDetectorConstructor = new (options?: {
+  fastMode?: boolean;
+  maxDetectedFaces?: number;
+}) => FaceDetectorInstance;
+
+type DetectedFace = {
+  boundingBox?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
 };
 
 const examples: Record<Language, string> = {
@@ -444,6 +462,8 @@ export default function App() {
   const [isProctorStarting, setIsProctorStarting] = useState(false);
   const [isProctorActive, setIsProctorActive] = useState(false);
   const [proctorStreams, setProctorStreams] = useState<MediaStream[]>([]);
+  const proctorStreamsRef = useRef<MediaStream[]>([]);
+  const proctorTerminationRef = useRef(false);
   const isCompilerDark = isDarkMode;
 
   const theme = useMemo(
@@ -669,6 +689,10 @@ export default function App() {
     });
   };
 
+  useEffect(() => {
+    proctorStreamsRef.current = proctorStreams;
+  }, [proctorStreams]);
+
   const logProctorEvent = (reason: string) => {
     void fetch('/api/lc/events', {
       method: 'POST',
@@ -695,7 +719,12 @@ export default function App() {
   };
 
   const terminateProctorSession = (reason: string) => {
-    stopProctorStreams(proctorStreams);
+    if (proctorTerminationRef.current) {
+      return;
+    }
+
+    proctorTerminationRef.current = true;
+    stopProctorStreams(proctorStreamsRef.current);
     setProctorStreams([]);
     setIsProctorActive(false);
     resetCompilerSession();
@@ -707,11 +736,161 @@ export default function App() {
     navigateTo('/');
   };
 
+  const getCameraStream = (streams: MediaStream[]) =>
+    streams.find((stream) => stream.getVideoTracks().length > 0 && stream.getAudioTracks().length > 0);
+
+  const startFaceMonitor = (stream: MediaStream, terminate: (reason: string) => void) => {
+    const FaceDetectorApi = (window as unknown as { FaceDetector?: FaceDetectorConstructor }).FaceDetector;
+    const videoTrack = stream.getVideoTracks()[0];
+
+    if (!FaceDetectorApi || !videoTrack) {
+      return () => undefined;
+    }
+
+    const video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.srcObject = new MediaStream([videoTrack]);
+    const detector = new FaceDetectorApi({ fastMode: true, maxDetectedFaces: 3 });
+    let cancelled = false;
+    let missingFaceCount = 0;
+    let multiFaceCount = 0;
+    let offCenterFaceCount = 0;
+    let busy = false;
+
+    void video.play().catch(() => undefined);
+
+    const intervalId = window.setInterval(() => {
+      if (cancelled || busy || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        return;
+      }
+
+      busy = true;
+      detector
+        .detect(video)
+        .then((faces) => {
+          if (cancelled) {
+            return;
+          }
+
+          if (faces.length === 0) {
+            missingFaceCount += 1;
+            multiFaceCount = 0;
+            offCenterFaceCount = 0;
+          } else if (faces.length > 1) {
+            multiFaceCount += 1;
+            missingFaceCount = 0;
+            offCenterFaceCount = 0;
+          } else {
+            const faceBox = faces[0].boundingBox;
+            const centerX = faceBox ? faceBox.x + faceBox.width / 2 : video.videoWidth / 2;
+            const centerY = faceBox ? faceBox.y + faceBox.height / 2 : video.videoHeight / 2;
+            const faceAreaRatio =
+              faceBox && video.videoWidth && video.videoHeight
+                ? (faceBox.width * faceBox.height) / (video.videoWidth * video.videoHeight)
+                : 0.12;
+            const isFaceOffCenter =
+              video.videoWidth > 0 &&
+              video.videoHeight > 0 &&
+              (centerX < video.videoWidth * 0.18 ||
+                centerX > video.videoWidth * 0.82 ||
+                centerY < video.videoHeight * 0.12 ||
+                centerY > video.videoHeight * 0.88 ||
+                faceAreaRatio < 0.035);
+
+            missingFaceCount = 0;
+            multiFaceCount = 0;
+            offCenterFaceCount = isFaceOffCenter ? offCenterFaceCount + 1 : 0;
+          }
+
+          if (multiFaceCount >= 2) {
+            terminate('Multiple people were detected during anti-cheat mode.');
+          }
+
+          if (missingFaceCount >= 5) {
+            terminate('No face was detected for too long during anti-cheat mode.');
+          }
+
+          if (offCenterFaceCount >= 6) {
+            terminate('Face position or gaze moved away from the camera for too long.');
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          busy = false;
+        });
+    }, 1200);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      video.pause();
+      video.srcObject = null;
+    };
+  };
+
+  const startMicrophoneMonitor = (stream: MediaStream, terminate: (reason: string) => void) => {
+    const audioTrack = stream.getAudioTracks()[0];
+
+    if (!audioTrack) {
+      terminate('Microphone stream was not available in anti-cheat mode.');
+      return () => undefined;
+    }
+
+    const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) {
+      return () => undefined;
+    }
+
+    const audioContext = new AudioContextCtor();
+    const source = audioContext.createMediaStreamSource(new MediaStream([audioTrack]));
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 1024;
+    source.connect(analyser);
+
+    const samples = new Uint8Array(analyser.fftSize);
+    let silentTicks = 0;
+    let loudTicks = 0;
+
+    const intervalId = window.setInterval(() => {
+      if (audioTrack.muted || audioTrack.readyState !== 'live' || !audioTrack.enabled) {
+        terminate('Microphone was muted or disabled during anti-cheat mode.');
+        return;
+      }
+
+      analyser.getByteTimeDomainData(samples);
+      const rms = Math.sqrt(
+        samples.reduce((total, sample) => {
+          const centered = (sample - 128) / 128;
+          return total + centered * centered;
+        }, 0) / samples.length,
+      );
+
+      silentTicks = rms < 0.004 ? silentTicks + 1 : 0;
+      loudTicks = rms > 0.55 ? loudTicks + 1 : 0;
+
+      if (silentTicks >= 20) {
+        terminate('Microphone signal was missing for too long during anti-cheat mode.');
+      }
+
+      if (loudTicks >= 6) {
+        terminate('Abnormal microphone noise was detected during anti-cheat mode.');
+      }
+    }, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+      source.disconnect();
+      void audioContext.close().catch(() => undefined);
+    };
+  };
+
   useEffect(() => {
     if (!isProctorActive) {
       return undefined;
     }
 
+    proctorTerminationRef.current = false;
     const terminateFromEvent = (reason: string) => (event: Event) => {
       event.preventDefault();
       terminateProctorSession(reason);
@@ -720,6 +899,12 @@ export default function App() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         terminateProctorSession('The browser tab was hidden during anti-cheat mode.');
+      }
+    };
+    const handleWindowBlur = () => terminateProctorSession('The browser window lost focus during anti-cheat mode.');
+    const handleFullscreenChange = () => {
+      if (document.fullscreenEnabled && !document.fullscreenElement) {
+        terminateProctorSession('Fullscreen mode was exited during anti-cheat mode.');
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -735,6 +920,14 @@ export default function App() {
       }
     };
     const handleTrackEnded = () => terminateProctorSession('Screen, camera, or microphone sharing stopped.');
+    const handleTrackMute = () => terminateProctorSession('Screen, camera, or microphone was muted during anti-cheat mode.');
+    const monitorCleanups: Array<() => void> = [];
+    const cameraStream = getCameraStream(proctorStreams);
+
+    if (cameraStream) {
+      monitorCleanups.push(startFaceMonitor(cameraStream, terminateProctorSession));
+      monitorCleanups.push(startMicrophoneMonitor(cameraStream, terminateProctorSession));
+    }
 
     document.addEventListener('copy', blockedClipboard, true);
     document.addEventListener('cut', blockedClipboard, true);
@@ -742,21 +935,32 @@ export default function App() {
     document.addEventListener('contextmenu', blockedClipboard, true);
     document.addEventListener('drop', blockedClipboard, true);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    window.addEventListener('blur', handleWindowBlur);
     window.addEventListener('keydown', handleKeyDown, true);
     proctorStreams.forEach((stream) => {
-      stream.getTracks().forEach((track) => track.addEventListener('ended', handleTrackEnded));
+      stream.getTracks().forEach((track) => {
+        track.addEventListener('ended', handleTrackEnded);
+        track.addEventListener('mute', handleTrackMute);
+      });
     });
 
     return () => {
+      monitorCleanups.forEach((cleanup) => cleanup());
       document.removeEventListener('copy', blockedClipboard, true);
       document.removeEventListener('cut', blockedClipboard, true);
       document.removeEventListener('paste', blockedClipboard, true);
       document.removeEventListener('contextmenu', blockedClipboard, true);
       document.removeEventListener('drop', blockedClipboard, true);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      window.removeEventListener('blur', handleWindowBlur);
       window.removeEventListener('keydown', handleKeyDown, true);
       proctorStreams.forEach((stream) => {
-        stream.getTracks().forEach((track) => track.removeEventListener('ended', handleTrackEnded));
+        stream.getTracks().forEach((track) => {
+          track.removeEventListener('ended', handleTrackEnded);
+          track.removeEventListener('mute', handleTrackMute);
+        });
       });
     };
   }, [isProctorActive, proctorStreams, language]);
@@ -771,6 +975,7 @@ export default function App() {
     }
 
     setIsProctorStarting(true);
+    proctorTerminationRef.current = false;
 
     try {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({
@@ -782,6 +987,14 @@ export default function App() {
         audio: true,
       });
       const nextStreams = [screenStream, mediaStream];
+      const screenTrack = screenStream.getVideoTracks()[0];
+      const screenSettings = screenTrack?.getSettings() as MediaTrackSettings & { displaySurface?: string };
+
+      if (screenSettings.displaySurface && screenSettings.displaySurface !== 'monitor') {
+        stopProctorStreams(nextStreams);
+        throw new Error('Anti-cheat requires sharing the entire screen, not a browser tab or window.');
+      }
+
       const nextLanguage = chooseProblemLanguage(problem, language);
 
       if (document.fullscreenEnabled && !document.fullscreenElement) {
@@ -793,6 +1006,7 @@ export default function App() {
       setResult(null);
       setIdeProblem(problem ?? null);
       setProctorStreams(nextStreams);
+      proctorStreamsRef.current = nextStreams;
       setIsProctorActive(true);
       setIsTimerRunning(true);
       navigateTo('/ide');
